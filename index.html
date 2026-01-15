@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>AquaFlow 智慧健康儀表板 Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #00d2ff;
+            --secondary: #00f2fe;
+            --bg: #0f172a;
+            --card-bg: rgba(255, 255, 255, 0.08);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: white;
+            font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+            margin: 0;
+            line-height: 1.6;
+        }
+
+        .container { width: 100%; max-width: 500px; }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border-radius: 24px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        h2, h3 { margin: 0 0 15px 0; color: var(--primary); letter-spacing: 1px; }
+
+        .input-group { margin-bottom: 15px; }
+        
+        input[type="number"], input[type="text"] {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 12px;
+            margin-right: 5px;
+            outline: none;
+        }
+
+        .badge {
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            color: #0f172a;
+            padding: 6px 16px;
+            border-radius: 50px;
+            font-weight: 800;
+            display: inline-block;
+            margin-top: 10px;
+            box-shadow: 0 4px 15px rgba(0, 210, 255, 0.3);
+        }
+
+        /* 水杯設計 */
+        .cup-section {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .cup {
+            width: 80px;
+            height: 110px;
+            border: 4px solid #fff;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+            position: relative;
+            margin: 0 auto 20px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .water {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 0%;
+            background: linear-gradient(180deg, var(--secondary) 0%, var(--primary) 100%);
+            transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 食物查詢區 */
+        .food-search-box {
+            position: relative;
+            width: 100%;
+        }
+        
+        #food-input { width: 92%; }
+
+        .result-item {
+            background: rgba(255,255,255,0.05);
+            padding: 10px;
+            border-radius: 10px;
+            margin-top: 10px;
+            border-left: 4px solid var(--primary);
+        }
+
+        button {
+            background: white;
+            color: #0f172a;
+            border: none;
+            padding: 14px;
+            border-radius: 14px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+            transition: 0.3s;
+        }
+
+        button:hover { transform: scale(1.02); background: var(--primary); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <h2>Personal Tracker</h2>
+        <div class="input-group">
+            <label>身高 (cm) / 體重 (kg)</label><br>
+            <input type="number" id="height" placeholder="175">
+            <input type="number" id="weight" placeholder="70">
+        </div>
+        <div id="bmi-badge" class="badge">BMI: --</div>
+    </div>
+
+    <div class="card cup-section">
+        <h3>每日飲水進度</h3>
+        <p><span id="water-val" style="font-size: 24px; font-weight: bold; color: var(--primary);">0</span> / 3000 ml</p>
+        <div class="cup"><div class="water" id="water-fill"></div></div>
+        <input type="range" id="water-range" min="0" max="3000" step="100" value="0" style="width:100%">
+        <button id="save-btn" style="margin-top:20px">紀錄今日數據</button>
+    </div>
+
+    <div class="card">
+        <h3>食物熱量查找</h3>
+        <input type="text" id="food-input" placeholder="試試輸入：雞蛋、美式咖啡..." oninput="searchFood()">
+        <div id="food-result"></div>
+    </div>
+
+    <div class="card">
+        <h3>數據趨勢分析</h3>
+        <canvas id="healthChart"></canvas>
+    </div>
+</div>
+
+<script>
+    // 1. 食物熱量資料庫 (你可以自行在這裡增加內容)
+    const foodDB = [
+        { name: "雞蛋", cal: "78 kcal/顆", note: "優質蛋白質" },
+        { name: "雞胸肉", cal: "165 kcal/100g", note: "健身必備" },
+        { name: "美式咖啡", cal: "5 kcal/杯", note: "幾乎無熱量" },
+        { name: "珍珠奶茶", cal: "650 kcal/杯", note: "熱量炸彈！" },
+        { name: "白飯", cal: "280 kcal/碗", note: "主要碳水來源" },
+        { name: "蘋果", cal: "52 kcal/顆", note: "豐富纖維" }
+    ];
+
+    function searchFood() {
+        const input = document.getElementById('food-input').value;
+        const resultDiv = document.getElementById('food-result');
+        resultDiv.innerHTML = '';
+        
+        if (input.trim() === '') return;
+
+        const filtered = foodDB.filter(f => f.name.includes(input));
+        
+        filtered.forEach(f => {
+            resultDiv.innerHTML += `
+                <div class="result-item">
+                    <strong>${f.name}</strong>: ${f.cal}<br>
+                    <small style="color: #888">${f.note}</small>
+                </div>
+            `;
+        });
+    }
+
+    // 2. 歷史數據與圖表邏輯
+    let healthChart;
+    const ctx = document.getElementById('healthChart').getContext('2d');
+    let historyData = JSON.parse(localStorage.getItem('myHealthData')) || [];
+
+    function initChart() {
+        healthChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: historyData.map(d => d.date),
+                datasets: [{
+                    label: '飲水量 (ml)',
+                    data: historyData.map(d => d.water),
+                    borderColor: '#00d2ff',
+                    backgroundColor: 'rgba(0, 210, 255, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { 
+                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    // BMI 即時更新
+    function updateBMI() {
+        const h = document.getElementById('height').value / 100;
+        const w = document.getElementById('weight').value;
+        if (h > 0 && w > 0) {
+            const bmi = (w / (h * h)).toFixed(1);
+            document.getElementById('bmi-badge').innerText = `BMI: ${bmi}`;
+        }
+    }
+
+    // 水杯拖動
+    document.getElementById('water-range').addEventListener('input', (e) => {
+        const val = e.target.value;
+        document.getElementById('water-val').innerText = val;
+        document.getElementById('water-fill').style.height = (val / 3000 * 100) + '%';
+    });
+
+    // 儲存
+    document.getElementById('save-btn').addEventListener('click', () => {
+        const now = new Date();
+        const label = `${now.getMonth()+1}/${now.getDate()}`;
+        const waterVal = document.getElementById('water-range').value;
+        
+        historyData.push({ date: label, water: waterVal });
+        if (historyData.length > 7) historyData.shift();
+        
+        localStorage.setItem('myHealthData', JSON.stringify(historyData));
+        healthChart.data.labels = historyData.map(d => d.date);
+        healthChart.data.datasets[0].data = historyData.map(d => d.water);
+        healthChart.update();
+    });
+
+    document.getElementById('height').addEventListener('input', updateBMI);
+    document.getElementById('weight').addEventListener('input', updateBMI);
+
+    initChart();
+</script>
+
+</body>
+</html>
